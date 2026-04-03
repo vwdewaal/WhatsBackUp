@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:path/path.dart' as p;
 
-import '../services/chat_import_service.dart';
+import '../models/chat_models.dart';
+import '../services/chat_repository.dart';
 import '../services/local_transfer_client.dart';
+import '../services/local_transfer_bundle_service.dart';
 import '../settings_controller.dart';
 
 class SendToPhoneScreen extends StatefulWidget {
@@ -13,18 +14,27 @@ class SendToPhoneScreen extends StatefulWidget {
 }
 
 class _SendToPhoneScreenState extends State<SendToPhoneScreen> {
-  final ChatImportService _importService = ChatImportService();
+  final ChatRepository _repository = ChatRepository();
   final LocalTransferClient _client = const LocalTransferClient();
+  final LocalTransferBundleService _bundleService = LocalTransferBundleService();
   final TextEditingController _hostController = TextEditingController();
   final TextEditingController _portController =
       TextEditingController(text: '0');
   final TextEditingController _tokenController = TextEditingController();
 
-  List<String> _zipPaths = <String>[];
+  List<ChatArchive> _archives = <ChatArchive>[];
+  final Set<String> _selectedArchiveIds = <String>{};
   String? _status;
   double? _progress;
   bool _sending = false;
   bool _checking = false;
+  bool _loadingArchives = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadArchives();
+  }
 
   @override
   void dispose() {
@@ -34,15 +44,17 @@ class _SendToPhoneScreenState extends State<SendToPhoneScreen> {
     super.dispose();
   }
 
-  Future<void> _pickZips() async {
-    final List<String> paths = await _importService.pickZipPaths(
-      allowMultiple: true,
-    );
-    if (!mounted || paths.isEmpty) {
+  Future<void> _loadArchives() async {
+    setState(() {
+      _loadingArchives = true;
+    });
+    final List<ChatArchive> archives = await _repository.getArchives();
+    if (!mounted) {
       return;
     }
     setState(() {
-      _zipPaths = paths;
+      _archives = archives.where((ChatArchive archive) => !archive.isArchived).toList();
+      _loadingArchives = false;
     });
   }
 
@@ -88,7 +100,7 @@ class _SendToPhoneScreenState extends State<SendToPhoneScreen> {
     }
   }
 
-  Future<void> _sendSelectedZips() async {
+  Future<void> _sendSelectedArchives() async {
     final String host = _hostController.text.trim();
     final int? port = int.tryParse(_portController.text.trim());
     final String token = _tokenController.text.trim();
@@ -96,8 +108,11 @@ class _SendToPhoneScreenState extends State<SendToPhoneScreen> {
       _showSnack('Enter the phone IP address, port, and pairing code first.');
       return;
     }
-    if (_zipPaths.isEmpty) {
-      _showSnack('Select one or more ZIPs first.');
+    final List<ChatArchive> selectedArchives = _archives
+        .where((ChatArchive archive) => _selectedArchiveIds.contains(archive.id))
+        .toList();
+    if (selectedArchives.isEmpty) {
+      _showSnack('Select one or more imported chats first.');
       return;
     }
 
@@ -108,14 +123,26 @@ class _SendToPhoneScreenState extends State<SendToPhoneScreen> {
     int successCount = 0;
     final List<String> failures = <String>[];
 
-    for (int index = 0; index < _zipPaths.length; index += 1) {
-      final String zipPath = _zipPaths[index];
+    for (int index = 0; index < selectedArchives.length; index += 1) {
+      final ChatArchive archive = selectedArchives[index];
       if (!mounted) {
         return;
       }
       setState(() {
         _status =
-            'Sending ${p.basenameWithoutExtension(zipPath)} (${index + 1}/${_zipPaths.length})';
+            'Preparing ${archive.displayName} (${index + 1}/${selectedArchives.length})';
+        _progress = 0;
+      });
+
+      final LocalTransferBundle bundle =
+          await _bundleService.createBundle(archive);
+
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _status =
+            'Sending ${archive.displayName} (${index + 1}/${selectedArchives.length})';
         _progress = 0;
       });
 
@@ -123,7 +150,7 @@ class _SendToPhoneScreenState extends State<SendToPhoneScreen> {
         host: host,
         port: port,
         token: token,
-        zipPath: zipPath,
+        zipPath: bundle.zipPath,
         onProgress: (int sentBytes, int totalBytes) {
           if (!mounted) {
             return;
@@ -155,8 +182,8 @@ class _SendToPhoneScreenState extends State<SendToPhoneScreen> {
       _sending = false;
       _progress = null;
       _status = failures.isEmpty
-          ? 'Sent $successCount chat ZIPs to your phone.'
-          : 'Sent $successCount of ${_zipPaths.length}. ${failures.first}';
+          ? 'Sent $successCount chats to your phone.'
+          : 'Sent $successCount of ${selectedArchives.length}. ${failures.first}';
     });
   }
 
@@ -230,34 +257,43 @@ class _SendToPhoneScreenState extends State<SendToPhoneScreen> {
               const SizedBox(width: 12),
               Expanded(
                 child: ElevatedButton.icon(
-                  onPressed: _sending ? null : _pickZips,
-                  icon: const Icon(Icons.folder_zip),
+                  onPressed: _sending || _loadingArchives ? null : _loadArchives,
+                  icon: const Icon(Icons.refresh),
                   label: Text(
-                    _zipPaths.isEmpty
-                        ? 'Select ZIPs'
-                        : 'Selected ${_zipPaths.length}',
+                    _loadingArchives ? 'Loading...' : 'Refresh chats',
                   ),
                 ),
               ),
             ],
           ),
           const SizedBox(height: 20),
-          if (_zipPaths.isNotEmpty) ...<Widget>[
-            const Text(
-              'Ready to send',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+          const Text(
+            'Select imported chats',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 8),
+          if (_archives.isEmpty && !_loadingArchives)
+            const Text('No imported chats were found in this desktop app yet.'),
+          for (final ChatArchive archive in _archives)
+            CheckboxListTile(
+              value: _selectedArchiveIds.contains(archive.id),
+              onChanged: _sending
+                  ? null
+                  : (bool? value) {
+                      setState(() {
+                        if (value ?? false) {
+                          _selectedArchiveIds.add(archive.id);
+                        } else {
+                          _selectedArchiveIds.remove(archive.id);
+                        }
+                      });
+                    },
+              controlAffinity: ListTileControlAffinity.leading,
+              contentPadding: EdgeInsets.zero,
+              title: Text(archive.displayName),
+              subtitle: Text(archive.folderPath),
             ),
-            const SizedBox(height: 8),
-            for (final String zipPath in _zipPaths)
-              ListTile(
-                dense: true,
-                contentPadding: EdgeInsets.zero,
-                leading: const Icon(Icons.archive_outlined),
-                title: Text(p.basenameWithoutExtension(zipPath)),
-                subtitle: Text(zipPath),
-              ),
-            const SizedBox(height: 8),
-          ],
+          const SizedBox(height: 8),
           if (_status != null)
             Container(
               padding: const EdgeInsets.all(12),
@@ -282,7 +318,7 @@ class _SendToPhoneScreenState extends State<SendToPhoneScreen> {
             ),
           const SizedBox(height: 20),
           ElevatedButton.icon(
-            onPressed: _sending ? null : _sendSelectedZips,
+            onPressed: _sending ? null : _sendSelectedArchives,
             icon: _sending
                 ? const SizedBox(
                     width: 18,
