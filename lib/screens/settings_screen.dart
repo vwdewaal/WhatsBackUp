@@ -8,6 +8,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import '../settings_controller.dart';
 import '../services/revenuecat_service.dart';
 import 'onboarding_screen.dart';
+import 'send_to_phone_screen.dart';
 import 'storage_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
@@ -163,6 +164,20 @@ class SettingsScreen extends StatelessWidget {
               Navigator.of(context).push(
                 MaterialPageRoute<void>(
                   builder: (_) => StorageScreen(),
+                ),
+              );
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.phone_android),
+            title: const Text('Send to phone'),
+            subtitle: const Text(
+              'Transfer WhatsApp export ZIPs to your phone over your local network.',
+            ),
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => const SendToPhoneScreen(),
                 ),
               );
             },
