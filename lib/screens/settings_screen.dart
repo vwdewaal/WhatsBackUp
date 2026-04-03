@@ -8,6 +8,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import '../settings_controller.dart';
 import '../services/revenuecat_service.dart';
 import 'onboarding_screen.dart';
+import 'receive_from_desktop_screen.dart';
 import 'storage_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
@@ -163,6 +164,20 @@ class SettingsScreen extends StatelessWidget {
               Navigator.of(context).push(
                 MaterialPageRoute<void>(
                   builder: (_) => StorageScreen(),
+                ),
+              );
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.devices),
+            title: const Text('Receive from desktop'),
+            subtitle: const Text(
+              'Import ZIPs over your local network from the desktop app.',
+            ),
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => const ReceiveFromDesktopScreen(),
                 ),
               );
             },
