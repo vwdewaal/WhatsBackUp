@@ -15,24 +15,59 @@ import 'firebase_options.dart';
 import 'services/revenuecat_service.dart';
 
 Future<void> main() async {
+  bool firebaseReady = false;
+  final bool shouldEnableFirebase = !kIsWeb &&
+      (defaultTargetPlatform == TargetPlatform.android ||
+          defaultTargetPlatform == TargetPlatform.iOS);
+
+  Future<void> recordError(
+    Object error,
+    StackTrace stack, {
+    required bool fatal,
+  }) async {
+    if (!firebaseReady) {
+      debugPrint('Skipping Crashlytics report because Firebase is unavailable: '
+          '$error');
+      return;
+    }
+    await FirebaseCrashlytics.instance.recordError(error, stack, fatal: fatal);
+  }
+
   runZonedGuarded(
     () async {
       WidgetsFlutterBinding.ensureInitialized();
-      await Firebase.initializeApp(
-        options: DefaultFirebaseOptions.currentPlatform,
-      );
+      if (shouldEnableFirebase) {
+        await Firebase.initializeApp(
+          options: DefaultFirebaseOptions.currentPlatform,
+        );
+        firebaseReady = true;
+      } else {
+        debugPrint(
+          'Firebase telemetry is disabled on this platform.',
+        );
+      }
 
-      await FirebaseCrashlytics.instance
-          .setCrashlyticsCollectionEnabled(!kDebugMode);
-      await FirebaseAnalytics.instance
-          .setAnalyticsCollectionEnabled(!kDebugMode);
+      if (firebaseReady) {
+        await FirebaseCrashlytics.instance
+            .setCrashlyticsCollectionEnabled(!kDebugMode);
+        await FirebaseAnalytics.instance
+            .setAnalyticsCollectionEnabled(!kDebugMode);
+      }
 
       await RevenueCatService.configure();
 
-      FlutterError.onError =
-          FirebaseCrashlytics.instance.recordFlutterFatalError;
+      FlutterError.onError = (FlutterErrorDetails details) {
+        FlutterError.presentError(details);
+        unawaited(
+          recordError(
+            details.exception,
+            details.stack ?? StackTrace.current,
+            fatal: true,
+          ),
+        );
+      };
       PlatformDispatcher.instance.onError = (Object error, StackTrace stack) {
-        FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
+        unawaited(recordError(error, stack, fatal: true));
         return true;
       };
 
@@ -45,7 +80,7 @@ Future<void> main() async {
       runApp(ArchiveViewerApp(settings: settings));
     },
     (Object error, StackTrace stack) {
-      FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
+      unawaited(recordError(error, stack, fatal: true));
     },
   );
 }

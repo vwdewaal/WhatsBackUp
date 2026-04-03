@@ -23,20 +23,35 @@ class ChatImportService {
   static const String errorChatAlreadyImported = 'error_chat_already_imported';
   static const String errorChatFileNotFound = 'error_chat_file_not_found';
   static const int _largeChatBytesThreshold = 50 * 1024 * 1024;
+  static const String _stagedZipFileName = '_import_source.zip';
 
   String normalizeArchiveName(String input) => _normalizeArchiveName(input);
 
-  Future<String?> pickZipPath() async {
+  Future<List<String>> pickZipPaths({bool allowMultiple = false}) async {
     final FilePickerResult? picked = await FilePicker.platform.pickFiles(
+      dialogTitle: 'Select WhatsApp export ZIPs',
       type: FileType.custom,
       allowedExtensions: <String>['zip'],
       withData: false,
+      allowMultiple: allowMultiple,
+      lockParentWindow: true,
     );
 
-    if (picked == null || picked.files.single.path == null) {
+    if (picked == null) {
+      return <String>[];
+    }
+    return picked.files
+        .map((PlatformFile file) => file.path)
+        .whereType<String>()
+        .toList();
+  }
+
+  Future<String?> pickZipPath() async {
+    final List<String> paths = await pickZipPaths();
+    if (paths.isEmpty) {
       return null;
     }
-    return picked.files.single.path!;
+    return paths.first;
   }
 
   Future<PreparedImport?> importZip({
@@ -75,14 +90,19 @@ class ChatImportService {
       targetDir.createSync(recursive: true);
     }
 
+    final String stagedZipPath = await _stageZipForImport(
+      sourceZipPath: zipPath,
+      targetDir: targetDir,
+    );
+
     await _extractZipInIsolate(
-      zipPath: zipPath,
+      zipPath: stagedZipPath,
       targetPath: targetDir.path,
       onProgress: onProgress,
     );
 
     _annotateOmittedMediaReferencesFromZip(
-      zipPath: zipPath,
+      zipPath: stagedZipPath,
       extractedRoot: targetDir.path,
     );
 
@@ -99,7 +119,7 @@ class ChatImportService {
       chatFilePath: chatText.path,
       derivedName: derivedName,
       finalName: finalName,
-      zipPath: zipPath,
+      zipPath: stagedZipPath,
     );
   }
 
@@ -123,14 +143,19 @@ class ChatImportService {
       targetDir.createSync(recursive: true);
     }
 
+    final String stagedZipPath = await _stageZipForImport(
+      sourceZipPath: zipPath,
+      targetDir: targetDir,
+    );
+
     await _extractZipTextOnlyInIsolate(
-      zipPath: zipPath,
+      zipPath: stagedZipPath,
       targetPath: targetDir.path,
       onProgress: onProgress,
     );
 
     _annotateOmittedMediaReferencesFromZip(
-      zipPath: zipPath,
+      zipPath: stagedZipPath,
       extractedRoot: targetDir.path,
     );
 
@@ -147,7 +172,7 @@ class ChatImportService {
       chatFilePath: chatText.path,
       derivedName: derivedName,
       finalName: finalName,
-      zipPath: zipPath,
+      zipPath: stagedZipPath,
     );
   }
 
@@ -311,7 +336,7 @@ class ChatImportService {
     return total;
   }
 
-  Future<String> finalizeIncrementalImport({
+  Future<IncrementalImportResult> finalizeIncrementalImport({
     required Directory archivesRoot,
     required PreparedImport prepared,
     required ChatArchive existing,
@@ -327,7 +352,13 @@ class ChatImportService {
 
     final String relativeChatPath =
         p.relative(prepared.chatFilePath, from: prepared.tempDirPath);
-    return p.join(targetDir.path, relativeChatPath);
+    final String relativeZipPath =
+        p.relative(prepared.zipPath, from: prepared.tempDirPath);
+    return IncrementalImportResult(
+      importRootPath: targetDir.path,
+      chatFilePath: p.join(targetDir.path, relativeChatPath),
+      zipPath: p.join(targetDir.path, relativeZipPath),
+    );
   }
 
   Future<void> discardPreparedImport(PreparedImport prepared) async {
@@ -441,6 +472,7 @@ class ChatImportService {
     final List<File> candidates = all
         .whereType<File>()
         .where((File file) =>
+            !_isIgnoredExtractedPath(file.path, root.path) &&
             file.path.toLowerCase().endsWith('.txt') &&
             !p.basename(file.path).startsWith('.'))
         .toList();
@@ -864,6 +896,19 @@ class ChatImportService {
 
     return ChatMessageType.text;
   }
+
+  Future<String> _stageZipForImport({
+    required String sourceZipPath,
+    required Directory targetDir,
+  }) async {
+    final File source = File(sourceZipPath);
+    final File staged = File(p.join(targetDir.path, _stagedZipFileName));
+    if (staged.existsSync()) {
+      staged.deleteSync();
+    }
+    await source.copy(staged.path);
+    return staged.path;
+  }
 }
 
 class _ParsedLine {
@@ -998,6 +1043,18 @@ class PreparedImport {
   final String chatFilePath;
   final String derivedName;
   final String finalName;
+  final String zipPath;
+}
+
+class IncrementalImportResult {
+  IncrementalImportResult({
+    required this.importRootPath,
+    required this.chatFilePath,
+    required this.zipPath,
+  });
+
+  final String importRootPath;
+  final String chatFilePath;
   final String zipPath;
 }
 
@@ -1259,7 +1316,10 @@ void _annotateOmittedMediaReferencesFromZip({
   final List<File> textFiles = Directory(extractedRoot)
       .listSync(recursive: true)
       .whereType<File>()
-      .where((File file) => file.path.toLowerCase().endsWith('.txt'))
+      .where((File file) =>
+          !_isIgnoredExtractedPath(file.path, extractedRoot) &&
+          file.path.toLowerCase().endsWith('.txt') &&
+          !p.basename(file.path).startsWith('.'))
       .toList()
     ..sort((File a, File b) => a.path.compareTo(b.path));
 
@@ -1286,7 +1346,9 @@ List<String> _orderedMediaNamesFromZip(String zipPath) {
     final Archive archive = ZipDecoder().decodeStream(input);
     return archive
         .where((ArchiveFile file) =>
-            file.isFile && !file.name.toLowerCase().endsWith('.txt'))
+            file.isFile &&
+            !_isIgnoredArchiveEntryName(file.name) &&
+            !file.name.toLowerCase().endsWith('.txt'))
         .map((ArchiveFile file) => p.basename(file.name))
         .where((String name) => name.isNotEmpty)
         .toList();
@@ -1516,6 +1578,9 @@ class _AttachmentIndex {
       if (entity is! File) {
         continue;
       }
+      if (_isIgnoredExtractedPath(entity.path, archiveRoot)) {
+        continue;
+      }
       final String fileName = p.basename(entity.path);
       final String normalized = _normalizeAttachmentKeyIsolate(fileName);
       final String stripped = _stripWhatsAppIndexPrefixIsolate(normalized);
@@ -1573,6 +1638,11 @@ void _extractZipWorker(Map<String, Object?> args) {
 
     for (final ArchiveFile file in archive) {
       final String safeName = file.name.replaceAll('..', '');
+      if (_isIgnoredArchiveEntryName(safeName)) {
+        processed += 1;
+        sendPort.send(processed / total);
+        continue;
+      }
       final String outputPath = p.normalize(p.join(targetPath, safeName));
 
       if (!outputPath.startsWith(targetPath)) {
@@ -1605,6 +1675,21 @@ void _extractZipWorker(Map<String, Object?> args) {
   } finally {
     input.close();
   }
+}
+
+bool _isIgnoredArchiveEntryName(String entryName) {
+  final List<String> parts = p.split(entryName);
+  for (final String part in parts) {
+    if (part == '__MACOSX' || part.startsWith('._')) {
+      return true;
+    }
+  }
+  return false;
+}
+
+bool _isIgnoredExtractedPath(String path, String rootPath) {
+  final String relative = p.relative(path, from: rootPath);
+  return _isIgnoredArchiveEntryName(relative);
 }
 
 void _extractZipTextWorker(Map<String, Object?> args) {

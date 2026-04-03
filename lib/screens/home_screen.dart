@@ -162,6 +162,10 @@ class _HomeScreenState extends State<HomeScreen>
 
   AppLocalizations get _l10n => AppLocalizations.of(context)!;
 
+  bool get _supportsDesktopBulkImport =>
+      Platform.isMacOS || Platform.isWindows || Platform.isLinux;
+  bool get _supportsSharedFileChannel => Platform.isAndroid || Platform.isIOS;
+
   @override
   void initState() {
     super.initState();
@@ -211,7 +215,7 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   Future<void> _consumeSharedFiles() async {
-    if (_handlingShare) {
+    if (!_supportsSharedFileChannel || _handlingShare) {
       return;
     }
     _handlingShare = true;
@@ -750,12 +754,10 @@ class _HomeScreenState extends State<HomeScreen>
         _busy = true;
       });
     }
-    _notifyImportTriggered();
-    _showImportStartupBanner();
-    final String? zipPath = await _importService.pickZipPath();
-    if (zipPath == null) {
-      _hideLargeImportBanner();
-      _resetImportUi();
+    final List<String> zipPaths = await _importService.pickZipPaths(
+      allowMultiple: _supportsDesktopBulkImport,
+    );
+    if (zipPaths.isEmpty) {
       if (context.mounted) {
         setState(() {
           _busy = false;
@@ -765,19 +767,12 @@ class _HomeScreenState extends State<HomeScreen>
     }
 
     try {
-      await _setLargeImportFlag(zipPath);
-      await _showLargeImportStartedIfNeeded();
-      _showImportProgressDialog();
-      _updateImportProgress(0.0, _l10n.importPreparing);
-      final PreparedImport prepared =
-          await _importService.prepareImportTextOnlyFromPath(
-        archivesRoot: await _repository.getArchivesRoot(),
-        zipPath: zipPath,
-        onProgress: (double progress) {
-          _updateImportProgress(progress, _l10n.importExtracting);
-        },
-      );
-      await _handlePreparedImport(prepared);
+      _notifyImportTriggered();
+      if (zipPaths.length == 1) {
+        await _importZipPath(zipPaths.first);
+      } else {
+        await _importMultipleZipPaths(zipPaths);
+      }
     } on FormatException catch (e) {
       if (!context.mounted) {
         return;
@@ -804,6 +799,80 @@ class _HomeScreenState extends State<HomeScreen>
     }
   }
 
+  Future<void> _importZipPath(String zipPath) async {
+    await _setLargeImportFlag(zipPath);
+    await _showLargeImportStartedIfNeeded();
+    _showImportProgressDialog();
+    final String label = _importDisplayNameForPath(zipPath);
+    _updateImportProgress(0.0, 'Importing $label - preparing');
+    final PreparedImport prepared = await _importService.prepareImportTextOnlyFromPath(
+      archivesRoot: await _repository.getArchivesRoot(),
+      zipPath: zipPath,
+      onProgress: (double progress) {
+        _updateImportProgress(progress, 'Importing $label - extracting');
+      },
+    );
+    await _handlePreparedImport(
+      prepared,
+      progressLabel: label,
+    );
+  }
+
+  Future<void> _importMultipleZipPaths(List<String> zipPaths) async {
+    int importedCount = 0;
+    final List<String> failedPaths = <String>[];
+
+    for (int index = 0; index < zipPaths.length; index++) {
+      final String zipPath = zipPaths[index];
+      final String label = _importDisplayNameForPath(zipPath);
+      await _setLargeImportFlag(zipPath);
+      await _showLargeImportStartedIfNeeded();
+      _showImportProgressDialog();
+      _updateImportProgress(0.0, 'Importing $label - preparing');
+      try {
+        final PreparedImport prepared =
+            await _importService.prepareImportTextOnlyFromPath(
+          archivesRoot: await _repository.getArchivesRoot(),
+          zipPath: zipPath,
+          onProgress: (double progress) {
+            _updateImportProgress(progress, 'Importing $label - extracting');
+          },
+        );
+        final ChatArchive? archive = await _handlePreparedImport(
+          prepared,
+          openAfterImport: false,
+          showIncrementalMessage: false,
+          progressLabel: label,
+        );
+        if (archive != null) {
+          importedCount += 1;
+        }
+      } on FormatException {
+        failedPaths.add(p.basename(zipPath));
+      } catch (_) {
+        failedPaths.add(p.basename(zipPath));
+      }
+    }
+
+    await _loadArchives();
+    if (!mounted) {
+      return;
+    }
+    if (importedCount > 0 && failedPaths.isEmpty) {
+      _showMessage(
+        'Imported $importedCount chats.',
+      );
+      return;
+    }
+    if (importedCount > 0) {
+      _showMessage(
+        'Imported $importedCount chats. Failed: ${failedPaths.join(', ')}',
+      );
+      return;
+    }
+    _showMessage('No chats were imported.');
+  }
+
   void _showMessage(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message)),
@@ -827,8 +896,14 @@ class _HomeScreenState extends State<HomeScreen>
     );
   }
 
-  Future<void> _handlePreparedImport(PreparedImport prepared) async {
+  Future<ChatArchive?> _handlePreparedImport(
+    PreparedImport prepared, {
+    bool openAfterImport = true,
+    bool showIncrementalMessage = true,
+    String? progressLabel,
+  }) async {
     bool finalized = false;
+    final String label = progressLabel ?? prepared.finalName;
     try {
       final Directory root = await _repository.getArchivesRoot();
       final List<ChatArchive> existing = await _repository.getArchives();
@@ -843,7 +918,11 @@ class _HomeScreenState extends State<HomeScreen>
       }).toList();
 
       if (candidates.isEmpty) {
-        _updateImportProgress(1.0, _l10n.importFinalizing);
+        _updateImportProgress(
+          1.0,
+          'Importing $label - finalizing',
+          indeterminate: true,
+        );
         final ChatArchive archive = await _importService.finalizeNewImport(
           archivesRoot: root,
           prepared: prepared,
@@ -851,38 +930,47 @@ class _HomeScreenState extends State<HomeScreen>
         finalized = true;
         await _mediaImportService.startJob(
           archive: archive,
-          zipPath: prepared.zipPath,
+          zipPath: p.join(
+            archive.folderPath,
+            p.relative(prepared.zipPath, from: prepared.tempDirPath),
+          ),
           targetDir: archive.folderPath,
         );
         await _recordImportIfNeeded();
         await _loadArchives();
         _markImportDone();
         if (!context.mounted) {
-          return;
+          return archive;
         }
-        final NavigatorState navigator = Navigator.of(context);
-        await navigator.push(
-          MaterialPageRoute<void>(
-            builder: (_) => ChatScreen(
-              archive: archive,
-              importService: _importService,
-              mediaImportService: _mediaImportService,
+        if (openAfterImport) {
+          final NavigatorState navigator = Navigator.of(context);
+          await navigator.push(
+            MaterialPageRoute<void>(
+              builder: (_) => ChatScreen(
+                archive: archive,
+                importService: _importService,
+                mediaImportService: _mediaImportService,
+              ),
             ),
-          ),
-        );
-        await _loadArchives();
+          );
+          await _loadArchives();
+        }
         _resetImportUi();
-        return;
+        return archive;
       }
 
       final ChatArchive? target =
           await _promptIncrementalTarget(prepared.finalName, candidates);
       if (target == null) {
-        return;
+        return null;
       }
 
-      _updateImportProgress(1.0, _l10n.importFinalizing);
-      final String newChatFilePath =
+      _updateImportProgress(
+        1.0,
+        'Importing $label - finalizing',
+        indeterminate: true,
+      );
+      final IncrementalImportResult result =
           await _importService.finalizeIncrementalImport(
         archivesRoot: root,
         prepared: prepared,
@@ -892,13 +980,13 @@ class _HomeScreenState extends State<HomeScreen>
 
       await _mediaImportService.startJob(
         archive: target,
-        zipPath: prepared.zipPath,
-        targetDir: p.dirname(newChatFilePath),
+        zipPath: result.zipPath,
+        targetDir: result.importRootPath,
       );
 
       final List<String> additional =
           List<String>.from(target.additionalChatFiles);
-      additional.add(newChatFilePath);
+      additional.add(result.chatFilePath);
       final ChatArchive updated = ChatArchive(
         id: target.id,
         name: target.name,
@@ -914,26 +1002,37 @@ class _HomeScreenState extends State<HomeScreen>
       await _loadArchives();
       _markImportDone();
       if (!context.mounted) {
-        return;
+        return updated;
       }
-      _showMessage(_l10n.incrementalUpdated);
-      final NavigatorState navigator = Navigator.of(context);
-      await navigator.push(
-        MaterialPageRoute<void>(
-          builder: (_) => ChatScreen(
-            archive: updated,
-            importService: _importService,
-            mediaImportService: _mediaImportService,
+      if (showIncrementalMessage) {
+        _showMessage(_l10n.incrementalUpdated);
+      }
+      if (openAfterImport) {
+        final NavigatorState navigator = Navigator.of(context);
+        await navigator.push(
+          MaterialPageRoute<void>(
+            builder: (_) => ChatScreen(
+              archive: updated,
+              importService: _importService,
+              mediaImportService: _mediaImportService,
+            ),
           ),
-        ),
-      );
-      await _loadArchives();
+        );
+        await _loadArchives();
+      }
       _resetImportUi();
+      return updated;
     } finally {
       if (!finalized) {
         await _importService.discardPreparedImport(prepared);
       }
     }
+  }
+
+  String _importDisplayNameForPath(String zipPath) {
+    final String raw = p.basenameWithoutExtension(zipPath);
+    final String normalized = _importService.normalizeArchiveName(raw);
+    return normalized.isEmpty ? raw : normalized;
   }
 
   Future<ChatArchive?> _promptIncrementalTarget(
@@ -1011,6 +1110,9 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   Set<String> _computeDisabledIds(List<ChatArchive> archives) {
+    if (!RevenueCatService.isAvailable) {
+      return <String>{};
+    }
     if (RevenueCatService.isPro.value) {
       return <String>{};
     }
@@ -1036,6 +1138,9 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   Future<bool> _ensureCanImport() async {
+    if (!RevenueCatService.isAvailable) {
+      return true;
+    }
     try {
       if (await RevenueCatService.hasEntitlement()) {
         return true;
@@ -1063,6 +1168,9 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   Future<void> _recordImportIfNeeded() async {
+    if (!RevenueCatService.isAvailable) {
+      return;
+    }
     if (await RevenueCatService.hasEntitlement()) {
       return;
     }
@@ -1171,6 +1279,7 @@ class _HomeScreenState extends State<HomeScreen>
     messenger.hideCurrentMaterialBanner();
     messenger.showMaterialBanner(
       MaterialBanner(
+        forceActionsBelow: true,
         content: const Text(
           'Large files take a while to load. It can be up to a minute. Please be patient while the import starts.',
         ),
@@ -1616,6 +1725,19 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   Widget _buildEmptyImportState() {
+    if (_supportsDesktopBulkImport) {
+      return SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: _EmptyImportCard(
+            title: 'Import from ZIP',
+            icon: Icons.archive,
+            onTap: _importWithPrompt,
+          ),
+        ),
+      );
+    }
+
     final bool isIos = Platform.isIOS;
     final String topLabel = isIos ? 'Import on iOS' : 'Import on Android';
     final IconData topIcon = isIos ? Icons.phone_iphone : Icons.android;
@@ -1713,6 +1835,10 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   Future<void> _importWithPrompt() async {
+    if (_supportsDesktopBulkImport) {
+      await _import();
+      return;
+    }
     final bool proceed = await _showImportLocationBanner();
     if (!proceed || !mounted) {
       return;
@@ -1730,17 +1856,18 @@ class _HomeScreenState extends State<HomeScreen>
     _importLocationCompleter = Completer<bool>();
     messenger.showMaterialBanner(
       MaterialBanner(
-        content: Row(
+        forceActionsBelow: true,
+        content: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
           children: <Widget>[
-            const Expanded(
-              child: Text('Choose the location of your stored WhatsApp chats.'),
-            ),
-            const SizedBox(width: 12),
+            const Text('Choose the location of your stored WhatsApp chats.'),
+            const SizedBox(height: 8),
             ValueListenableBuilder<int>(
               valueListenable: _importLocationCountdown,
               builder: (_, int value, __) {
                 return Text(
-                  value.toString(),
+                  'Continuing in $value',
                   style: const TextStyle(fontWeight: FontWeight.w700),
                 );
               },

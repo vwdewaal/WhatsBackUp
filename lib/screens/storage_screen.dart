@@ -18,6 +18,9 @@ class StorageScreen extends StatefulWidget {
 }
 
 class _StorageScreenState extends State<StorageScreen> {
+  bool get _showSystemStorageDetails =>
+      Platform.isAndroid || Platform.isIOS;
+
   @override
   void initState() {
     super.initState();
@@ -151,26 +154,34 @@ class _StorageScreenState extends State<StorageScreen> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: <Widget>[
-          _InfoRow(
-            label: l10n.storageAvailable,
-            value: _storageInfo == null
-                ? l10n.storageNotCalculated
-                : formatBytes(_storageInfo!.availableBytes),
-          ),
-          const SizedBox(height: 12),
+          if (_showSystemStorageDetails) ...<Widget>[
+            _InfoRow(
+              label: l10n.storageAvailable,
+              value: _storageInfo == null
+                  ? (_calculating
+                      ? l10n.storageCalculating
+                      : l10n.storageNotCalculated)
+                  : formatBytes(_storageInfo!.availableBytes),
+            ),
+            const SizedBox(height: 12),
+          ],
           _InfoRow(
             label: l10n.storageAppSize,
             value: _appSizeBytes == null
-                ? l10n.storageNotCalculated
+                ? (_calculating
+                    ? l10n.storageCalculating
+                    : l10n.storageNotCalculated)
                 : formatBytes(_appSizeBytes!),
           ),
-          const SizedBox(height: 12),
-          _InfoRow(
-            label: l10n.storageLocation,
-            value: _storageInfo?.volumeName?.isNotEmpty == true
-                ? _storageInfo!.volumeName!
-                : l10n.storageLocationUnknown,
-          ),
+          if (_showSystemStorageDetails) ...<Widget>[
+            const SizedBox(height: 12),
+            _InfoRow(
+              label: l10n.storageLocation,
+              value: _storageInfo?.volumeName?.isNotEmpty == true
+                  ? _storageInfo!.volumeName!
+                  : l10n.storageLocationUnknown,
+            ),
+          ],
           const SizedBox(height: 16),
           SwitchListTile(
             title: Text(l10n.storageChatSizesToggle),
@@ -211,7 +222,9 @@ class _StorageScreenState extends State<StorageScreen> {
                 _InfoRow(
                   label: l10n.storageCleanupEstimate,
                   value: _failedImportBytes == null
-                      ? l10n.storageNotCalculated
+                      ? (_calculating
+                          ? l10n.storageCalculating
+                          : l10n.storageNotCalculated)
                       : formatBytes(_failedImportBytes!),
                 ),
                 const SizedBox(height: 12),

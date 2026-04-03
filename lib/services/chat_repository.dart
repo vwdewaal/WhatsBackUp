@@ -70,6 +70,7 @@ class ChatRepository {
     final List<File> candidates = all
         .whereType<File>()
         .where((File file) =>
+            !_isIgnoredArchivePath(file.path, root.path) &&
             file.path.toLowerCase().endsWith('.txt') &&
             !p.basename(file.path).startsWith('.'))
         .toList();
@@ -92,6 +93,17 @@ class ChatRepository {
     });
 
     return candidates.first;
+  }
+
+  bool _isIgnoredArchivePath(String path, String rootPath) {
+    final String relative = p.relative(path, from: rootPath);
+    final List<String> parts = p.split(relative);
+    for (final String part in parts) {
+      if (part == '__MACOSX' || part.startsWith('._')) {
+        return true;
+      }
+    }
+    return false;
   }
 
   Future<bool> updateArchive(ChatArchive archive) async {

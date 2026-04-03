@@ -11,8 +11,31 @@ class RevenueCatService {
   static final ValueNotifier<CustomerInfo?> customerInfo =
       ValueNotifier<CustomerInfo?>(null);
 
+  static bool get isAvailable {
+    if (kIsWeb) {
+      return false;
+    }
+    switch (defaultTargetPlatform) {
+      case TargetPlatform.android:
+      case TargetPlatform.iOS:
+        return true;
+      case TargetPlatform.macOS:
+      case TargetPlatform.windows:
+      case TargetPlatform.linux:
+        return false;
+      default:
+        return false;
+    }
+  }
+
   static Future<void> configure() async {
     if (_configured) {
+      return;
+    }
+    if (!isAvailable) {
+      _configured = true;
+      isPro.value = true;
+      customerInfo.value = null;
       return;
     }
     if (kDebugMode) {
@@ -28,28 +51,43 @@ class RevenueCatService {
   }
 
   static Future<bool> hasEntitlement() async {
+    if (!isAvailable) {
+      return true;
+    }
     final CustomerInfo info = await Purchases.getCustomerInfo();
     return info.entitlements.active.containsKey(revenueCatEntitlementId);
   }
 
   static Future<CustomerInfo> refreshCustomerInfo() async {
+    if (!isAvailable) {
+      throw UnsupportedError('RevenueCat is unavailable on this platform.');
+    }
     final CustomerInfo info = await Purchases.getCustomerInfo();
     _handleCustomerInfo(info);
     return info;
   }
 
   static Future<CustomerInfo> restorePurchases() async {
+    if (!isAvailable) {
+      throw UnsupportedError('RevenueCat is unavailable on this platform.');
+    }
     final CustomerInfo info = await Purchases.restorePurchases();
     _handleCustomerInfo(info);
     return info;
   }
 
   static Future<Offering?> getOffering() async {
+    if (!isAvailable) {
+      return null;
+    }
     final Offerings offerings = await Purchases.getOfferings();
     return offerings.getOffering(revenueCatOfferingId) ?? offerings.current;
   }
 
   static Future<PaywallResult> presentPaywall() async {
+    if (!isAvailable) {
+      throw UnsupportedError('RevenueCat is unavailable on this platform.');
+    }
     final Offering? offering = await getOffering();
     if (offering == null) {
       return RevenueCatUI.presentPaywall();
@@ -58,6 +96,9 @@ class RevenueCatService {
   }
 
   static Future<PaywallResult> presentPaywallIfNeeded() async {
+    if (!isAvailable) {
+      throw UnsupportedError('RevenueCat is unavailable on this platform.');
+    }
     final Offering? offering = await getOffering();
     if (offering == null) {
       return RevenueCatUI.presentPaywallIfNeeded(revenueCatEntitlementId);
@@ -69,10 +110,16 @@ class RevenueCatService {
   }
 
   static Future<void> presentCustomerCenter() async {
+    if (!isAvailable) {
+      throw UnsupportedError('RevenueCat is unavailable on this platform.');
+    }
     await RevenueCatUI.presentCustomerCenter();
   }
 
   static Future<CustomerInfo?> purchaseLifetimePackage() async {
+    if (!isAvailable) {
+      throw UnsupportedError('RevenueCat is unavailable on this platform.');
+    }
     final Offering? offering = await getOffering();
     if (offering == null) {
       return null;

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 
 import 'package:path/path.dart' as p;
 
@@ -55,6 +56,7 @@ class MediaImportService {
           _jobs[job.id] = job;
         }
       }
+      await _migrateLegacyDesktopJobs();
     } catch (_) {
       // Ignore malformed file.
     }
@@ -118,6 +120,16 @@ class MediaImportService {
     await loadJobs();
     for (final MediaImportJob job in _jobs.values) {
       if (job.status == statusRunning || job.status == statusPaused) {
+        if (_shouldPauseExternalDesktopJob(job)) {
+          final MediaImportJob updated = job.copyWith(
+            status: statusPaused,
+            error: errorMissingZip,
+          );
+          _jobs[job.id] = updated;
+          await _persistJobs();
+          _jobStreamController.add(updated);
+          continue;
+        }
         if (_activeJobId == job.id) {
           continue;
         }
@@ -227,5 +239,32 @@ class MediaImportService {
         _activeJobId = null;
       }
     }
+  }
+
+  Future<void> _migrateLegacyDesktopJobs() async {
+    bool changed = false;
+    for (final MapEntry<String, MediaImportJob> entry in _jobs.entries.toList()) {
+      final MediaImportJob job = entry.value;
+      if (_shouldPauseExternalDesktopJob(job)) {
+        _jobs[entry.key] = job.copyWith(
+          status: statusPaused,
+          error: errorMissingZip,
+        );
+        changed = true;
+      }
+    }
+    if (changed) {
+      await _persistJobs();
+    }
+  }
+
+  bool _shouldPauseExternalDesktopJob(MediaImportJob job) {
+    if (kIsWeb) {
+      return false;
+    }
+    if (!(Platform.isMacOS || Platform.isWindows || Platform.isLinux)) {
+      return false;
+    }
+    return !p.isWithin(job.targetDir, job.zipPath) && !job.zipPath.startsWith(job.targetDir);
   }
 }

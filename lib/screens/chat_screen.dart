@@ -1121,6 +1121,7 @@ class _ChatScreenState extends State<ChatScreen> {
     if (_bookmarkIndices.isEmpty || !_itemScrollController.isAttached) {
       return;
     }
+    _autoScrollToBottom = false;
     setState(() {
       _currentBookmarkIndex =
           (_currentBookmarkIndex + delta) % _bookmarkIndices.length;
@@ -1299,6 +1300,7 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Future<void> _jumpToMatch(int delta) async {
+    _autoScrollToBottom = false;
     if (_dbMode) {
       if (_dbMatchIds.isEmpty || !_itemScrollController.isAttached) {
         return;
@@ -1344,6 +1346,7 @@ class _ChatScreenState extends State<ChatScreen> {
     if (_dbMode) {
       return;
     }
+    _autoScrollToBottom = false;
     await _buildUntilMessageIndex(messageIndex);
     if (!mounted || !_itemScrollController.isAttached) {
       return;
@@ -1396,6 +1399,7 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   void _scrubToFraction(double fraction) {
+    _autoScrollToBottom = false;
     if (_dbMode) {
       if (_dbVisibleCount == 0 || !_itemScrollController.isAttached) {
         return;

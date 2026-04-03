@@ -173,83 +173,86 @@ class SettingsScreen extends StatelessWidget {
             color: settings.primaryColor,
           ),
           const SizedBox(height: 12),
-          ValueListenableBuilder<bool>(
-            valueListenable: RevenueCatService.isPro,
-            builder: (BuildContext context, bool isPro, _) {
-              return ListTile(
-                leading: Icon(isPro ? Icons.verified : Icons.lock_outline),
-                title: Text(
-                  isPro ? l10n.proActiveTitle : l10n.proUpgradeTitle,
-                ),
-                subtitle: Text(
-                  isPro ? l10n.proThankYouSubtitle : l10n.proUnlockSubtitle,
-                ),
-                onTap: () async {
-                  try {
-                    final PaywallResult result =
-                        await RevenueCatService.presentPaywall();
-                    if (!context.mounted) {
-                      return;
+          if (RevenueCatService.isAvailable) ...<Widget>[
+            ValueListenableBuilder<bool>(
+              valueListenable: RevenueCatService.isPro,
+              builder: (BuildContext context, bool isPro, _) {
+                return ListTile(
+                  leading: Icon(isPro ? Icons.verified : Icons.lock_outline),
+                  title: Text(
+                    isPro ? l10n.proActiveTitle : l10n.proUpgradeTitle,
+                  ),
+                  subtitle: Text(
+                    isPro ? l10n.proThankYouSubtitle : l10n.proUnlockSubtitle,
+                  ),
+                  onTap: () async {
+                    try {
+                      final PaywallResult result =
+                          await RevenueCatService.presentPaywall();
+                      if (!context.mounted) {
+                        return;
+                      }
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(l10n.paywallResult(result.name)),
+                        ),
+                      );
+                    } catch (error) {
+                      if (!context.mounted) {
+                        return;
+                      }
+                      final code = RevenueCatService.parseErrorCode(error);
+                      final message =
+                          code == PurchasesErrorCode.purchaseCancelledError
+                              ? l10n.purchaseCancelled
+                              : l10n.purchaseFailedTryAgain;
+                      ScaffoldMessenger.of(context)
+                          .showSnackBar(SnackBar(content: Text(message)));
                     }
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(l10n.paywallResult(result.name)),
-                      ),
-                    );
-                  } catch (error) {
-                    if (!context.mounted) {
-                      return;
-                    }
-                    final code = RevenueCatService.parseErrorCode(error);
-                    final message = code == PurchasesErrorCode.purchaseCancelledError
-                        ? l10n.purchaseCancelled
-                        : l10n.purchaseFailedTryAgain;
-                    ScaffoldMessenger.of(context)
-                        .showSnackBar(SnackBar(content: Text(message)));
+                  },
+                );
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.restore),
+              title: Text(l10n.restorePurchases),
+              onTap: () async {
+                try {
+                  await RevenueCatService.restorePurchases();
+                  if (!context.mounted) {
+                    return;
                   }
-                },
-              );
-            },
-          ),
-          ListTile(
-            leading: const Icon(Icons.restore),
-            title: Text(l10n.restorePurchases),
-            onTap: () async {
-              try {
-                await RevenueCatService.restorePurchases();
-                if (!context.mounted) {
-                  return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text(l10n.purchasesRestored)),
+                  );
+                } catch (_) {
+                  if (!context.mounted) {
+                    return;
+                  }
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text(l10n.restoreFailedTryAgain)),
+                  );
                 }
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text(l10n.purchasesRestored)),
-                );
-              } catch (_) {
-                if (!context.mounted) {
-                  return;
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.manage_accounts_outlined),
+              title: Text(l10n.manageSubscription),
+              subtitle: Text(l10n.openCustomerCenter),
+              onTap: () async {
+                try {
+                  await RevenueCatService.presentCustomerCenter();
+                } catch (_) {
+                  if (!context.mounted) {
+                    return;
+                  }
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text(l10n.customerCenterUnavailable)),
+                  );
                 }
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text(l10n.restoreFailedTryAgain)),
-                );
-              }
-            },
-          ),
-          ListTile(
-            leading: const Icon(Icons.manage_accounts_outlined),
-            title: Text(l10n.manageSubscription),
-            subtitle: Text(l10n.openCustomerCenter),
-            onTap: () async {
-              try {
-                await RevenueCatService.presentCustomerCenter();
-              } catch (_) {
-                if (!context.mounted) {
-                  return;
-                }
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text(l10n.customerCenterUnavailable)),
-                );
-              }
-            },
-          ),
+              },
+            ),
+          ],
           const SizedBox(height: 24),
           const Divider(height: 32),
           _SectionHeader(

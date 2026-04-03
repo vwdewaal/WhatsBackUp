@@ -1,12 +1,20 @@
 import 'dart:io';
 
 Future<int> calculateDirectorySize(Directory dir) async {
-  if (!await dir.exists()) {
+  try {
+    if (!await dir.exists()) {
+      return 0;
+    }
+  } catch (_) {
     return 0;
   }
   int total = 0;
-  final List<FileSystemEntity> entities =
-      dir.listSync(recursive: true, followLinks: false);
+  final List<FileSystemEntity> entities;
+  try {
+    entities = dir.listSync(recursive: true, followLinks: false);
+  } catch (_) {
+    return 0;
+  }
   for (final FileSystemEntity entity in entities) {
     try {
       if (entity is File) {

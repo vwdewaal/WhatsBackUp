@@ -27,6 +27,8 @@ class StorageService {
       return StorageInfo(availableBytes: available, volumeName: volume);
     } on PlatformException {
       return null;
+    } on MissingPluginException {
+      return null;
     }
   }
 }
