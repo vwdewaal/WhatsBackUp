@@ -1,0 +1,79 @@
+WhatsBackUp Privacy Policy
+Last updated: 2026-02-18
+
+Summary
+WhatsBackUp is an offline viewer for WhatsApp chat exports. Your chat content stays on your device. We do not operate our own servers to store your chats. We do use third-party services for analytics, crash reporting, and purchases. These services may collect limited technical data.
+
+1. Data We Collect
+We collect the minimum data needed to operate the app:
+1.1 App Analytics
+- Event data about app usage (e.g., screen views, feature usage).
+- Device/app identifiers provided by the platform/SDK.
+Provider: Google Firebase Analytics.
+
+1.2 Crash Reports
+- Crash logs and diagnostics when the app crashes or errors.
+- Device/app identifiers, stack traces, and crash context.
+Provider: Google Firebase Crashlytics.
+
+1.3 Purchases and Entitlements
+- Purchase/entitlement status, subscription state, and related identifiers.
+Provider: RevenueCat (and the App Store / Google Play).
+
+1.4 Local-Only Data (Stored on Your Device)
+- Imported chat archives and media files.
+- App settings (e.g., theme, language, import button visibility).
+We do not upload your chats or media to our servers.
+
+2. Data We Do Not Collect
+- We do not collect or store your chat content on our servers.
+- We do not sell your personal data.
+
+3. How We Use Data
+- To keep the app stable and improve performance (crash reporting).
+- To understand feature usage and improve the app (analytics).
+- To manage in-app purchases and entitlements (purchases).
+
+4. Legal Basis (GDPR/UK GDPR)
+Where applicable, we rely on:
+- Legitimate interests: to improve app stability and quality (analytics/crash).
+- Contract: to provide paid features and manage entitlements.
+If required by law, we will obtain consent before collecting analytics.
+
+5. Data Retention
+Third-party providers retain data according to their policies:
+- Firebase Analytics/Crashlytics: retention per Google/Firebase settings.
+- RevenueCat: retention per RevenueCat policies.
+Local data remains on your device until you delete it or uninstall the app.
+
+6. Sharing and Third Parties
+We share data only with:
+- Google Firebase (Analytics, Crashlytics)
+- RevenueCat (purchase/entitlement management)
+- Apple App Store / Google Play (purchase processing)
+These providers process data under their own terms and privacy policies.
+
+7. International Transfers
+Our providers may process data in countries outside your own. They use appropriate safeguards under their privacy policies.
+
+8. Your Rights (GDPR/UK GDPR)
+Depending on your location, you may have rights to:
+- Access, correct, or delete personal data.
+- Object to or restrict processing.
+- Data portability.
+Contact us using the details below to exercise your rights.
+
+9. Children
+This app is not directed to children under 13. We do not knowingly collect data from children.
+
+10. Security
+We use reputable third-party services and platform protections. However, no method of transmission or storage is 100% secure.
+
+11. Changes
+We may update this policy. We will update the “Last updated” date.
+
+12. Contact
+If you have questions or requests, contact:
+Email: [ADD SUPPORT EMAIL]
+Company/Developer: [ADD DEVELOPER NAME]
+Address: [ADD OPTIONAL ADDRESS]

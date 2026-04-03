@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "90963734221",
+    "project_id": "whatsbackup-ec952",
+    "storage_bucket": "whatsbackup-ec952.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:90963734221:android:7737f81770c6193256c384",
+        "android_client_info": {
+          "package_name": "co.dewaal.whatsapp_archive_viewer"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAV5cw3b0F3bimlrtvGrwvq9Gkjwx_nqXY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

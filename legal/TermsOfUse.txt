@@ -1,0 +1,51 @@
+WhatsBackUp Terms of Use
+Last updated: 2026-02-18
+
+Summary
+WhatsBackUp is an offline viewer for WhatsApp chat exports. By using the app, you agree to these terms.
+
+1. License
+We grant you a personal, non-exclusive, non-transferable license to use the app for your own use, subject to these terms and applicable laws.
+
+2. User Content and Responsibility
+You are responsible for the chat content you import and store. You must have the right to export, store, and view the content. We do not review or endorse user content.
+WhatsBackUp is an independent app and is not affiliated with, endorsed by, or sponsored by WhatsApp or Meta. WhatsApp is a trademark of Meta Platforms, Inc.
+
+3. Backups and Data Loss
+You are responsible for maintaining backups. We are not responsible for loss, corruption, or deletion of data, including chat archives or media.
+
+4. Refunds and Feature Access
+If a refund is issued for a paid purchase, access to paid features may be revoked. When access is revoked, only the free tier (currently 5 chats) remains fully accessible. Chats beyond the free tier may be disabled/greyed out until the purchase is restored or repurchased. We do not delete your chats.
+
+5. Lock and Hide Features
+Lock/Hide features are convenience features and are not guaranteed to be secure or provide encryption. You are responsible for how you use these features.
+
+6. Translations
+Translations may be automated and may contain inaccuracies. We are not responsible for translation errors.
+
+7. Purchases and Subscriptions
+Purchases are processed by the App Store or Google Play. We do not control their billing or refund decisions. Please refer to their policies for billing, refunds, and cancellations.
+
+8. Prohibited Use
+You agree not to:
+- Use the app in violation of any laws or regulations.
+- Attempt to reverse engineer, decompile, or misuse the app.
+- Use the app to store or share content you do not have rights to.
+
+9. Disclaimer
+The app is provided “as is” without warranties of any kind. We disclaim all warranties, including merchantability, fitness for a particular purpose, and non-infringement.
+
+10. Limitation of Liability
+To the maximum extent permitted by law, we are not liable for any indirect, incidental, special, or consequential damages arising from use of the app.
+
+11. Changes to the App or Terms
+We may update the app or these terms at any time. Continued use means you accept the updated terms.
+
+12. Governing Law
+This agreement is governed by the laws of [ADD COUNTRY/STATE]. Any disputes will be handled in the courts of [ADD JURISDICTION].
+
+13. Contact
+If you have questions about these terms, contact:
+Email: [ADD SUPPORT EMAIL]
+Company/Developer: [ADD DEVELOPER NAME]
+Address: [ADD OPTIONAL ADDRESS]
