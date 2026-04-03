@@ -32,11 +32,13 @@ class LocalTransferSession {
   const LocalTransferSession({
     required this.token,
     required this.address,
+    required this.addresses,
     required this.port,
   });
 
   final String token;
   final String address;
+  final List<String> addresses;
   final int port;
 }
 
@@ -72,12 +74,13 @@ class LocalTransferServer {
       return _session!;
     }
 
-    final InternetAddress address = await _pickBindAddress();
-    final HttpServer server = await HttpServer.bind(address, 0);
+    final List<String> addresses = await _pickCandidateAddresses();
+    final HttpServer server = await HttpServer.bind(InternetAddress.anyIPv4, 0);
     _server = server;
     _session = LocalTransferSession(
       token: _generateToken(),
-      address: address.address,
+      address: addresses.first,
+      addresses: addresses,
       port: server.port,
     );
 
@@ -259,7 +262,8 @@ class LocalTransferServer {
     );
   }
 
-  Future<InternetAddress> _pickBindAddress() async {
+  Future<List<String>> _pickCandidateAddresses() async {
+    final Set<String> candidates = <String>{};
     try {
       final List<NetworkInterface> interfaces =
           await NetworkInterface.list(type: InternetAddressType.IPv4);
@@ -269,14 +273,19 @@ class LocalTransferServer {
             continue;
           }
           if (_isPrivateAddress(address.address)) {
-            return address;
+            candidates.add(address.address);
           }
         }
       }
     } catch (_) {
-      // Fall through to loopback.
+      // Fall through to fallback.
     }
-    return InternetAddress.anyIPv4;
+    if (candidates.isEmpty) {
+      return <String>['127.0.0.1'];
+    }
+    final List<String> sorted = candidates.toList()
+      ..sort((String a, String b) => _addressRank(a).compareTo(_addressRank(b)));
+    return sorted;
   }
 
   bool _isPrivateAddress(String address) {
@@ -289,6 +298,19 @@ class LocalTransferServer {
         address.startsWith('172.2') ||
         address.startsWith('172.30.') ||
         address.startsWith('172.31.');
+  }
+
+  int _addressRank(String address) {
+    if (address.startsWith('192.168.')) {
+      return 0;
+    }
+    if (address.startsWith('172.')) {
+      return 1;
+    }
+    if (address.startsWith('10.')) {
+      return 2;
+    }
+    return 3;
   }
 
   String _generateToken() {

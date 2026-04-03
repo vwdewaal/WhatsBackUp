@@ -199,9 +199,16 @@ class _ReceiveFromDesktopScreenState extends State<ReceiveFromDesktopScreen> {
           ),
           const SizedBox(height: 16),
           _InfoCard(
-            label: 'IP address',
+            label: 'Recommended IP address',
             value: session?.address ?? (_starting ? 'Starting...' : 'Unavailable'),
           ),
+          if (session != null && session.addresses.length > 1) ...<Widget>[
+            const SizedBox(height: 12),
+            _InfoCard(
+              label: 'Other local addresses',
+              value: session.addresses.skip(1).join('\n'),
+            ),
+          ],
           const SizedBox(height: 12),
           _InfoCard(
             label: 'Port',
@@ -213,6 +220,11 @@ class _ReceiveFromDesktopScreenState extends State<ReceiveFromDesktopScreen> {
             value: session?.token ?? (_starting ? 'Generating...' : 'Unavailable'),
           ),
           const SizedBox(height: 20),
+          if (session != null)
+            const Text(
+              'If desktop cannot connect, try one of the other local addresses shown here. VPN or virtual adapters can make phones report a 10.x address even when your Wi-Fi is 192.168.x.x.',
+            ),
+          if (session != null) const SizedBox(height: 20),
           if (status != null)
             Container(
               padding: const EdgeInsets.all(12),
