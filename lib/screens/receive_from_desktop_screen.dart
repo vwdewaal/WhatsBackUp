@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
+import 'package:archive/archive_io.dart';
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 
@@ -20,6 +22,8 @@ class ReceiveFromDesktopScreen extends StatefulWidget {
 }
 
 class _ReceiveFromDesktopScreenState extends State<ReceiveFromDesktopScreen> {
+  static const String _transferManifestFile = 'whatsbackup_transfer.json';
+
   final ChatRepository _repository = ChatRepository();
   final ChatImportService _importService = ChatImportService();
   late final MediaImportService _mediaImportService =
@@ -100,6 +104,15 @@ class _ReceiveFromDesktopScreenState extends State<ReceiveFromDesktopScreen> {
   ) async {
     try {
       final Directory archivesRoot = await _repository.getArchivesRoot();
+      final LocalTransferUploadResult? bundleResult =
+          await _tryImportArchiveBundle(
+        archivesRoot: archivesRoot,
+        upload: upload,
+      );
+      if (bundleResult != null) {
+        return bundleResult;
+      }
+
       final PreparedImport prepared =
           await _importService.prepareImportTextOnlyFromPath(
         archivesRoot: archivesRoot,
@@ -171,6 +184,115 @@ class _ReceiveFromDesktopScreenState extends State<ReceiveFromDesktopScreen> {
         success: false,
         message: error.toString(),
       );
+    }
+  }
+
+  Future<LocalTransferUploadResult?> _tryImportArchiveBundle({
+    required Directory archivesRoot,
+    required LocalTransferUpload upload,
+  }) async {
+    final String pendingId = 'pending_${DateTime.now().millisecondsSinceEpoch}';
+    final Directory pendingDir = Directory(p.join(archivesRoot.path, pendingId));
+    pendingDir.createSync(recursive: true);
+
+    try {
+      await _extractZip(
+        zipPath: upload.file.path,
+        targetPath: pendingDir.path,
+      );
+
+      final File manifestFile = File(
+        p.join(pendingDir.path, _transferManifestFile),
+      );
+      if (!manifestFile.existsSync()) {
+        if (pendingDir.existsSync()) {
+          pendingDir.deleteSync(recursive: true);
+        }
+        return null;
+      }
+
+      final Map<String, dynamic> manifest = jsonDecode(
+        manifestFile.readAsStringSync(),
+      ) as Map<String, dynamic>;
+      if (manifest['format'] != 'whatsbackup_archive_bundle') {
+        if (pendingDir.existsSync()) {
+          pendingDir.deleteSync(recursive: true);
+        }
+        return null;
+      }
+
+      manifestFile.deleteSync();
+
+      final String archiveId = DateTime.now().millisecondsSinceEpoch.toString();
+      final Directory targetDir = Directory(p.join(archivesRoot.path, archiveId));
+      if (targetDir.existsSync()) {
+        targetDir.deleteSync(recursive: true);
+      }
+      pendingDir.renameSync(targetDir.path);
+
+      final String chatFilePath = p.join(
+        targetDir.path,
+        manifest['chatFilePath'] as String,
+      );
+      final List<String> additionalChatFiles =
+          (manifest['additionalChatFiles'] as List<dynamic>? ?? <dynamic>[])
+              .whereType<String>()
+              .map((String path) => p.join(targetDir.path, path))
+              .toList();
+
+      final ChatArchive archive = ChatArchive(
+        id: archiveId,
+        name: manifest['name'] as String? ?? 'Chat',
+        sourceName: manifest['sourceName'] as String? ??
+            (manifest['name'] as String? ?? 'Chat'),
+        folderPath: targetDir.path,
+        chatFilePath: chatFilePath,
+        createdAt: DateTime.now(),
+        additionalChatFiles: additionalChatFiles,
+      );
+
+      await _repository.updateArchive(archive);
+
+      return LocalTransferUploadResult(
+        success: true,
+        message: 'Imported ${archive.displayName}',
+      );
+    } catch (_) {
+      if (pendingDir.existsSync()) {
+        pendingDir.deleteSync(recursive: true);
+      }
+      rethrow;
+    }
+  }
+
+  Future<void> _extractZip({
+    required String zipPath,
+    required String targetPath,
+  }) async {
+    final InputFileStream input = InputFileStream(zipPath);
+    try {
+      final Archive archive = ZipDecoder().decodeStream(input);
+      for (final ArchiveFile file in archive) {
+        final String name = file.name.replaceAll('\\', '/');
+        final List<String> parts = p.split(name);
+        if (parts.any((String part) => part == '__MACOSX' || part.startsWith('._'))) {
+          continue;
+        }
+        final String outputPath = p.joinAll(<String>[targetPath, ...parts]);
+        if (file.isFile) {
+          File(outputPath).createSync(recursive: true);
+          final OutputFileStream output = OutputFileStream(outputPath);
+          try {
+            file.writeContent(output);
+          } finally {
+            await output.close();
+          }
+        } else {
+          Directory(outputPath).createSync(recursive: true);
+        }
+      }
+    } finally {
+      await input.close();
     }
   }
 
