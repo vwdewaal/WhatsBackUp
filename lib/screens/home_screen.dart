@@ -1462,6 +1462,7 @@ class _HomeScreenState extends State<HomeScreen>
                             builder: (_) => const SettingsScreen(),
                           ),
                         );
+                        await _loadArchives();
                         await _loadHideMode();
                       }
                     },
@@ -1501,6 +1502,7 @@ class _HomeScreenState extends State<HomeScreen>
                           builder: (_) => const SettingsScreen(),
                         ),
                       );
+                      await _loadArchives();
                       await _loadHideMode();
                     },
                   ),

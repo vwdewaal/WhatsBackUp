@@ -34,6 +34,7 @@ class _ReceiveFromDesktopScreenState extends State<ReceiveFromDesktopScreen> {
   LocalTransferStatus? _status;
   StreamSubscription<LocalTransferStatus>? _statusSub;
   bool _starting = false;
+  bool _importedAnything = false;
 
   @override
   void initState() {
@@ -110,6 +111,9 @@ class _ReceiveFromDesktopScreenState extends State<ReceiveFromDesktopScreen> {
         upload: upload,
       );
       if (bundleResult != null) {
+        if (bundleResult.success) {
+          _importedAnything = true;
+        }
         return bundleResult;
       }
 
@@ -302,15 +306,27 @@ class _ReceiveFromDesktopScreenState extends State<ReceiveFromDesktopScreen> {
     final LocalTransferSession? session = _session;
     final LocalTransferStatus? status = _status;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Receive From Desktop'),
-        backgroundColor: settings.primaryColor,
-        foregroundColor: Colors.white,
-      ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: <Widget>[
+    return PopScope<bool>(
+      canPop: false,
+      onPopInvokedWithResult: (bool didPop, bool? result) {
+        if (didPop) {
+          return;
+        }
+        Navigator.of(context).pop(_importedAnything);
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back),
+            onPressed: () => Navigator.of(context).pop(_importedAnything),
+          ),
+          title: const Text('Receive From Desktop'),
+          backgroundColor: settings.primaryColor,
+          foregroundColor: Colors.white,
+        ),
+        body: ListView(
+          padding: const EdgeInsets.all(16),
+          children: <Widget>[
           const Text(
             'Open this screen on your phone, then enter these details on desktop.',
             style: TextStyle(fontSize: 16),
@@ -381,7 +397,8 @@ class _ReceiveFromDesktopScreenState extends State<ReceiveFromDesktopScreen> {
                   },
             child: const Text('Refresh pairing code'),
           ),
-        ],
+          ],
+        ),
       ),
     );
   }
